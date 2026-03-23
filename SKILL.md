@@ -1,116 +1,151 @@
 ---
 name: "kol-workflow"
-description: "KOL达人投放管理工作流 - 达人搜索、评级定价、建联话术生成、邮件发送。Invoke when user needs to find/analyze KOL creators, calculate CPM pricing, generate outreach scripts, or send outreach emails."
+description: "KOL达人投放管理工作流 - 从产品话题生成到达人建联发送的完整流程。当用户需要：生成产品话题关键词、搜索达人并爬取数据、评分筛选达人、提取联系方式、生成建联话术、发送邮件时调用此技能。"
 ---
 
 # KOL Claw - 达人投放管理系统
 
-一套完整的KOL达人投放工作流，从达人发现到建联跟进全流程自动化。
+一套完整的KOL达人投放工作流，从产品分析到达人建联全流程自动化。
 
-## 项目结构
+## 决策树：选择你的下一步
 
 ```
-kol-workflow/
-├── SKILL.md                              # 本文件
-├── scripts/
-│   ├── analyze/
-│   │   └── anaylze_kol_v2.py           # KOL评分分析（8维度加权评分）
-│   ├── outreach/
-│   │   ├── extract_email.py             # 邮箱提取（AI + 正则）
-│   │   ├── generate_script.py           # 建联话术生成
-│   │   ├── daily_tasks.py              # 每日任务清单
-│   │   ├── contact_tracker.py          # 建联进度追踪
-│   │   ├── budget_tracker.py            # 预算追踪
-│   │   └── playwright_gmail_sender.py  # Gmail自动发送
-│   ├── search/
-│   │   └── tikhub_client.py             # TikHub API客户端
-│   └── kol_workflow.py                  # 工作流统一入口
-├── outputs/                              # 输出目录
-├── data/                                 # 数据目录（需手动创建）
-├── docs/
-│   ├── anaylze_kol_v2流程说明.md        # 评分分析详细文档
-│   └── analyze_kol流程说明.md           # v1版本文档
-└── requirements.txt
+用户需求是什么？
+│
+├─ 没有明确指定 → 默认执行全流程（步骤1→2→3→4→5→6）
+│
+├─ 我只需要某个步骤 → 执行对应步骤
+│   ├─ 步骤1：生成话题关键词 → 询问产品信息，生成话题和关键词
+│   ├─ 步骤2：搜索达人爬取数据 → 询问存储路径，搜索并保存达人数据
+│   ├─ 步骤3：评分筛选达人 → 使用同一路径，进行评分分析
+│   ├─ 步骤4：提取联系方式 → 使用同一路径，提取联系方式
+│   ├─ 步骤5：生成建联话术 → 使用同一路径，生成话术
+│   └─ 步骤6：发送邮件 → 使用同一路径，发送邮件
+│
+└─ 我不知道在哪一步 → 先查看数据文件状态，判断当前进度
 ```
 
-## 核心功能
+**重要**：步骤2时 Agent 应询问用户存储路径（默认 `outputs/KOL达人评分最终报告.xlsx`），后续步骤使用同一路径。
 
-| 功能 | 脚本 | 说明 |
-|------|------|------|
-| KOL评分分析 | `scripts/analyze/anaylze_kol_v2.py` | 8维度加权评分、动态CPM定价 |
-| 建联话术生成 | `scripts/outreach/generate_script.py` | 根据达人数据生成个性化话术 |
-| 邮箱提取 | `scripts/outreach/extract_email.py` | AI模型从signature提取联系方式 |
-| 每日任务清单 | `scripts/outreach/daily_tasks.py` | 待建联/待跟进达人清单 |
-| Gmail发送 | `scripts/outreach/playwright_gmail_sender.py` | Playwright自动化发送邮件 |
+---
 
-## 快速开始
+## 步骤 1：生成产品话题关键词
 
-### 1. 安装依赖
+根据产品特点，生成用于搜索达人的话题标签和关键词。
 
-```bash
-pip install -r requirements.txt
+**执行方式**：
+1. 询问用户目标产品是什么（名称、品类、卖点、目标受众等）
+2. 基于产品信息生成相关话题标签和搜索关键词
+
+**输出示例**：
+```
+话题：#skincare #beauty #glowingskin
+关键词：skincare routine, beauty tips, glowing skin
 ```
 
-### 2. 配置环境变量
+**输出**：话题标签和搜索关键词列表，用于步骤2搜索达人
 
-创建 `.env` 文件：
-```bash
-OPENAI_API_KEY=your_openai_api_key
-TIK_HUB_API_KEY=your_tikhub_api_key
-FEISHU_WEBHOOK_URL=your_webhook_url  # 可选
+---
+
+## 步骤 2：搜索达人并爬取数据
+
+使用 TikHub API 搜索达人并获取视频数据，所有数据统一保存到最终报告文件。
+
+**统一输出文件**：`outputs/KOL达人评分最终报告.xlsx`
+
+### 2.1 搜索达人
+
+```python
+from scripts.search.tikhub_client import TikHubClient
+
+client = TikHubClient()
+# 搜索达人并保存到 Excel（询问用户存储路径）
+users = client.search_tiktok_users(keyword=keyword, output_path=output_path)
 ```
 
-### 3. 准备达人数据
+### 2.2 爬取达人详细数据
 
-创建 `data/kol_list.csv`，必需字段：
-```csv
-达人昵称,unique_id,signature,粉丝数,作品数,播放1,播放2,播放3,播放4,播放5,点赞1,点赞2,点赞3,点赞4,点赞5,评论1,评论2,评论3,评论4,评论5,收藏1,收藏2,收藏3,收藏4,收藏5
+```python
+import pandas as pd
+
+# 直接使用 2.1 返回的 users 数据
+for idx, user in enumerate(users):
+    sec_uid = user["sec_uid"]
+    
+    # 获取达人视频数据（最新3个 + 最早2个）
+    videos = client.fetch_user_post(sec_uid=sec_uid, count=20)
+    
+    if len(videos) >= 10:
+        # 提取最新3个 + 最早2个
+        recent_3 = videos[:3]
+        oldest_2 = videos[-2:]
+        all_5 = recent_3 + oldest_2
+        
+        # 更新播放数据到 user 字典
+        for i, video in enumerate(all_5, 1):
+            stats = video.get("stats", {})
+            user[f"播放{i}"] = stats.get("play_count", 0)
+            user[f"点赞{i}"] = stats.get("digg_count", 0)
+            user[f"评论{i}"] = stats.get("comment_count", 0)
+            user[f"收藏{i}"] = stats.get("collect_count", 0)
+        
+        print(f"[{idx+1}/{len(users)}] {user['nickname']} - 已获取 {len(videos)} 个视频")
+
+# 保存更新后的数据到 Excel
+df = pd.DataFrame(users)
+df.to_excel(output_path, index=False)
+print(f"已保存所有达人数据到 {output_path}")
 ```
 
-### 4. 运行分析
+**说明**：Agent 应询问用户存储路径，默认为 `outputs/KOL达人评分最终报告.xlsx`
 
-```bash
-# 分析达人并生成评分报告
-python scripts/analyze/anaylze_kol_v2.py
+**输入**：
+- 搜索关键词（步骤1生成）
 
-# 生成建联话术
-python scripts/outreach/generate_script.py <达人昵称>
+**输出**：`outputs/KOL达人评分最终报告.xlsx`（包含达人基本信息、粉丝数、播放量、点赞、评论等）
 
-# 批量生成话术（TOP3未建联达人）
-python scripts/outreach/generate_script.py
+---
+
+## 步骤 3：评分筛选达人
+
+对达人进行 8 维度加权评分，确定投放优先级和报价建议。
+
+```python
+from scripts.analyze.anaylze_kol_v2 import run_kol_analysis
+
+# 读取并分析数据，询问用户存储路径
+run_kol_analysis(excel_path=output_path)
 ```
 
-## 评分系统 (anaylze_kol_v2.py)
+**说明**：Agent 应使用步骤2的同一路径
 
-### 8维度评分体系
+**输出**：同一文件中新增评分相关列（总分、投放优先级、建议报价等）
 
-| 维度 | 条件 | 分数 |
-|------|------|------|
-| **体量分** | | |
-| 低粉爆款 | <5千粉 + 播粉比>5 | +5 |
-| 中粉爆款 | 5千-3万粉 + 播粉比>15 | +6 |
-| 稳定中体量 | 5千-10万粉 + 播粉比>1 | +4 |
-| 大体量 | >10万粉 | +3 |
-| **播粉比** | ≥3 | +1 |
-| **稳定性** | 变异系数<30% | +2 |
-| **爆款** | ≥2个极值 | +2 |
-| **性价比** | CPM<8 | +2 |
-| **趋势** | 上升/下降 | ±2 |
-| **内容匹配** | 完全/部分/不匹配 | +2/+1/-1 |
-| **互动率** | ≥5%/≥2%/<1% | +2/+1/-1 |
+### 评分维度
+
+| 维度 | 最高分 | 判断条件 |
+|------|--------|----------|
+| 体量分 | +6 | 中粉爆款(5k-3w粉+播粉比>15) |
+| 播粉比 | +1 | ≥3 |
+| 稳定性 | +2 | 变异系数<30% |
+| 爆款 | +2 | ≥2个极值视频 |
+| 性价比 | +2 | CPM<8 |
+| 趋势 | ±2 | 上升/下降趋势 |
+| 内容匹配 | ±1 | 完全/部分/不匹配 |
+| 互动率 | ±1 | ≥5%/≥2%/<1% |
 
 ### 优先级划分
 
-| 优先级 | 总分 | 说明 |
+| 优先级 | 总分 | 建议 |
 |--------|------|------|
 | 高 | ≥12分 | 强烈推荐投放 |
 | 中 | 8-12分 | 可考虑投放 |
 | 低 | <8分 | 暂不推荐 |
 
-### 动态CPM定价
+### 动态 CPM 定价
 
 ```
-粉丝量级：
+粉丝量级定价：
   < 5千粉    → CPM = 8
   5千-3万    → CPM = 15
   3万-10万   → CPM = 18
@@ -124,101 +159,136 @@ python scripts/outreach/generate_script.py
   高价   = 中位价 × 1.25
 ```
 
-## 话术生成 (generate_script.py)
+---
 
-### 使用方式
+## 步骤 4：提取联系方式
 
-```bash
-# 单个达人
-python scripts/outreach/generate_script.py skincare_emma
+从达人签名中提取邮箱、Instagram、WhatsApp 等联系方式。
 
-# 批量生成（未建联TOP3）
-python scripts/outreach/generate_script.py
+```python
+from scripts.outreach.extract_email import extract_contact_with_ai
+
+# 提取联系方式，使用同一路径
+extract_contact_with_ai(excel_path=output_path)
 ```
 
-### 话术策略
+**说明**：Agent 应使用前面步骤的同一路径
 
-| 达人类型 | 条件 | 策略 |
-|----------|------|------|
+**输出**：同一文件中新增"联系方式"列
+
+**说明**：使用 OpenAI GPT-4o-mini 智能识别联系方式
+
+---
+
+## 步骤 5：生成建联话术
+
+根据达人粉丝量和播放数据，生成个性化建联话术。
+
+```python
+from scripts.outreach.generate_script import generate_script, batch_generate
+
+# 单个达人
+generate_script(kol_name="达人昵称", excel_path=output_path)
+
+# 或批量生成（TOP3 未建联达人）
+batch_generate(excel_path=output_path, top_n=3)
+```
+
+**说明**：Agent 应使用前面步骤的同一路径
+
+**话术策略**：
+
+| 达人类型 | 条件 | 话术风格 |
+|----------|------|----------|
 | 大达人 | ≥5万粉 | 正式商务型 |
 | 中达人 | 5千-5万 | 询价型 |
 | 小达人 | <5千 | 爆款突出型 |
 
-话术内容包含：
-- 初始联系话术（TikTok DM）
-- 跟进消息模板
+**输出**：同一文件中新增"话术"列
 
-## 邮箱提取 (extract_email.py)
+---
 
-### 使用方式
+## 步骤 6：发送邮件
 
+通过 Playwright 自动化发送 Gmail 邮件。
+
+```python
+from scripts.outreach.playwright_gmail_sender import GmailAutoSender
+
+sender = GmailAutoSender()
+
+# 首次使用：登录 Gmail
+sender.login()
+
+# 发送邮件，使用同一路径
+sender.send_from_excel(excel_path=output_path, delay=30)
+```
+
+**说明**：Agent 应使用前面步骤的同一路径
+
+**参数**：
+- `delay`：发送间隔（秒），建议 30 以上
+
+---
+
+## 常见陷阱
+
+❌ **评分显示"数据不足"**
+→ 确保每个达人至少有 3 个有效播放数据
+
+❌ **CPM 报价不知道是否合理**
+→ 计算 CPM = 报价 ÷ (平均播放 ÷ 1000)，CPM ≤ 15 为合理
+
+❌ **Gmail 发送失败**
+→ 先运行 `--login` 重新登录，确保 Playwright 浏览器已安装
+
+❌ **邮箱提取不到**
+→ 确认达人 signature 中确实包含联系方式
+
+---
+
+## 最佳实践
+
+- 步骤1的话题关键词要精准，直接影响达人搜索质量
+- 步骤2爬取数据时注意 API 调用频率，避免被限流
+- 步骤3评分后优先处理"高"优先级达人
+- 步骤5话术可根据品牌特点调整模板
+- 步骤6发送前先测试登录是否成功
+
+---
+
+## 项目结构
+
+```
+kol-workflow/
+├── scripts/
+│   ├── search/
+│   │   └── tikhub_client.py        # TikHub API：搜索达人、爬取数据
+│   ├── analyze/
+│   │   └── anaylze_kol_v2.py       # 8维度评分分析
+│   ├── outreach/
+│   │   ├── extract_email.py        # 提取联系方式
+│   │   ├── generate_script.py      # 生成建联话术
+│   │   └── playwright_gmail_sender.py  # Gmail发送
+│   └── kol_workflow.py             # 工作流统一入口
+└── outputs/
+    └── KOL达人评分最终报告.xlsx     # 统一输出文件（包含所有数据）
+```
+
+---
+
+## 前提条件
+
+### 1. 安装依赖
 ```bash
-# 从Excel文件提取联系方式
-python scripts/outreach/extract_email.py "outputs/KOL达人评分最终报告.xlsx"
-```
-
-### 功能特点
-
-- 使用 OpenAI GPT-4o-mini 模型
-- 从 signature 字段提取邮箱、Instagram、WhatsApp 等联系方式
-- 支持多种联系方式格式
-
-## 工作流入口 (kol_workflow.py)
-
-```bash
-# 查看项目状态
-python kol_workflow.py --status
-
-# 步骤1: 发现达人（已废弃）
-python kol_workflow.py --step 1
-
-# 步骤2: 获取数据
-python kol_workflow.py --step 2 --limit 50
-
-# 步骤3: 提取邮箱
-python kol_workflow.py --step 3
-
-# 步骤4: 评分分析
-python kol_workflow.py --step 4
-
-# 步骤5: 建联追踪
-python kol_workflow.py --step 5
-
-# 步骤6: 发送邮件
-python kol_workflow.py --step 6 --login
-
-# 运行多个步骤
-python kol_workflow.py --step 3-5
-python kol_workflow.py --all
-```
-
-## 依赖
-
-```
-pandas>=2.0.0
-openpyxl>=3.1.0
-numpy>=1.24.0
-requests>=2.31.0
-openai>=1.0.0
-playwright>=1.40.0
-python-dotenv>=1.0.0
-```
-
-安装 Playwright 浏览器：
-```bash
+cd kol-claw/kol-workflow
+pip install -r requirements.txt
 playwright install chromium
 ```
 
-## 常见问题
-
-### Q: 评分显示"数据不足"？
-A: 确保每个达人至少有3个有效播放数据。
-
-### Q: 如何判断报价是否合理？
-A: 计算 CPM = 报价 ÷ (平均播放 ÷ 1000)，CPM ≤ 15 为合理。
-
-### Q: 话术保存在哪里？
-A: 话术保存在 Excel 报告的"话术"列，可直接复制使用。
-
-### Q: 如何批量处理？
-A: 使用 `generate_script.py` 不带参数时，自动处理未建联的 TOP3 达人。
+### 2. 配置环境变量
+在项目根目录创建 `.env` 文件：
+```
+OPENAI_API_KEY=your_openai_api_key
+TIK_HUB_API_KEY=your_tikhub_api_key
+```

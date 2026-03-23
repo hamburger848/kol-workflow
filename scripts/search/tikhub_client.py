@@ -144,7 +144,8 @@ class TikHubClient:
     # ========== TikTok API ==========
     def search_tiktok_users(self, keyword: str, cursor: int = 0,
                             search_id: str = None, cookie: str = None,
-                            parse_result: bool = True) -> Dict:
+                            parse_result: bool = True,
+                            output_path: str = None) -> Dict:
         """
         搜索 TikTok 用户
 
@@ -158,6 +159,7 @@ class TikHubClient:
                        从上一次请求的返回响应中获取: $.data.extra.logid 或 $.data.log_pb.impr_id
             cookie: 用户cookie（可选，如果需要使用自己的账号搜索或遇到接口报错时提供）
             parse_result: 是否解析结果（默认True，返回解析后的用户列表）
+            output_path: 输出Excel文件路径（可选，如提供则自动保存结果）
 
         Returns:
             如果 parse_result=True: 用户列表，每个用户包含：
@@ -195,7 +197,33 @@ class TikHubClient:
                         "sec_uid": user_info.get("sec_uid", ""),
                     })
 
+        if output_path and users:
+            self._save_users_to_excel(users, output_path)
+
         return users
+
+    def _save_users_to_excel(self, users: List[Dict], output_path: str):
+        """
+        将搜索到的用户保存到 Excel 文件
+
+        Args:
+            users: 用户列表
+            output_path: 输出文件路径
+        """
+        import pandas as pd
+
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        df = pd.DataFrame([{
+            "达人昵称": u["nickname"],
+            "unique_id": u["unique_id"],
+            "signature": u.get("signature", ""),
+            "粉丝数": u["followers"],
+            "sec_uid": u["sec_uid"],
+        } for u in users])
+        df.to_excel(output_path, index=False)
+        print(f"已保存 {len(users)} 个达人到 {output_path}")
     
     def fetch_user_post(self, sec_uid: str, cursor: int = 0, count: int = 20,
                         cover_format: int = 2, post_item_list_request_type: int = 0,
