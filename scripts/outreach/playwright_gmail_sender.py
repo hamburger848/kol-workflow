@@ -16,7 +16,9 @@ from playwright.sync_api import sync_playwright, Error as PlaywrightError
 CHROMIUM_PATH = "C:\\Users\\Administrator\\AppData\\Local\\ms-playwright\\chromium-1124\\chrome-win\\chrome.exe"
 
 class GmailAutoSender:
-    def __init__(self, auth_state_path: str = "gmail_auth_state.json"):
+    def __init__(self, auth_state_path: str = None):
+        if auth_state_path is None:
+            auth_state_path = os.getenv("GMAIL_AUTH_STATE", "gmail_auth_state.json")
         self.auth_state_path = auth_state_path
         self.browser = None
         self.context = None

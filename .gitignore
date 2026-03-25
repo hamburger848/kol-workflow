@@ -41,18 +41,9 @@ env/
 Thumbs.db
 
 # Data files (keep sample)
-data/*.csv
-data/*.xlsx
-outputs/*.xlsx
-outputs/*.png
-!data/.gitkeep
-!outputs/.gitkeep
-
-# Logs
-*.log
-
-# Playwright
-.playwright/
+assets/data/*.csv
+assets/data/*.xlsx
+!assets/data/.gitkeep
 
 # Gmail auth state
-*auth_state*.json
+gmail_auth_state.json

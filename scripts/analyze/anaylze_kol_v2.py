@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -42,8 +43,9 @@ SCORE_WEIGHTS = {
 # 基础参数
 PLAY_COLS = ["播放1", "播放2", "播放3", "播放4", "播放5"]
 BASE_CPM = 15
-DATA_DIR = Path("../outputs")
-DATA_DIR.mkdir(exist_ok=True)
+DEFAULT_OUTPUT_PATH = os.getenv("DEFAULT_OUTPUT_PATH", "outputs/KOL达人评分最终报告.xlsx")
+OUTPUT_DIR = Path(DEFAULT_OUTPUT_PATH).parent
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def extract_contact(signature):
     import re
@@ -221,9 +223,9 @@ def calculate_total_score(row):
 
 
 # ======================【6】主流程：一键运行======================
-def run_kol_analysis(file_path="kol_list.csv"):
-    print("🔍 开始分析 KOL 达人数据...")
-    df = pd.read_csv(file_path, encoding="utf-8-sig")
+def run_kol_analysis(file_path=DEFAULT_OUTPUT_PATH):
+    print(f"🔍 开始分析 KOL 达人数据...")
+    df = pd.read_excel(file_path, encoding="utf-8-sig")
 
     df["联系方式"] = df["signature"].apply(extract_contact)
 
@@ -267,12 +269,13 @@ def run_kol_analysis(file_path="kol_list.csv"):
     df = df.sort_values("总分", ascending=False).reset_index(drop=True)
     df["投放优先级"] = df["总分"].apply(lambda x: "高" if x >= 12 else "中" if x >= 8 else "低")
 
-    # 输出
-    df.to_excel(DATA_DIR / "KOL达人评分最终报告.xlsx", index=False)
-    print("✅ 分析完成！文件已保存到 /outputs 文件夹")
+    # 输出（追加模式）
+    with pd.ExcelWriter(file_path, mode='a', engine='openpyxl', if_sheet_exists='replace') as writer:
+        df.to_excel(writer, sheet_name='评分结果', index=False)
+    print(f"✅ 分析完成！评分结果已追加到 {file_path}")
     return df
 
 
 # ======================【启动】======================
 if __name__ == "__main__":
-    final_df = run_kol_analysis("D:\\project\\kol-claw\\kol-claw\\scripts\\mock_kol_data.csv")
+    final_df = run_kol_analysis()

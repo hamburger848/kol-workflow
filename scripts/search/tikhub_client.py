@@ -22,38 +22,29 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-try:
-    from dotenv import load_dotenv
-    env_path = Path(__file__).parent.parent / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-except ImportError:
-    pass
-
-
+DEFAULT_OUTPUT_PATH = os.getenv("DEFAULT_OUTPUT_PATH", "outputs/KOL达人评分最终报告.xlsx")
+api_key = os.getenv("TIKHUB_API_KEY")
 
 class TikHubClient:
     """TikHub API 客户端"""
     BASE_URL = "https://api.tikhub.io/api/v1"
     PLATFORM_TIKTOK = "tiktok"
     
-    def __init__(self, api_key: Optional[str] = None, timeout: int = 60, 
-                 proxy: Optional[str] = None, max_retries: int = 5):
+    def __init__(self, api_key: Optional[str] = None, timeout: int = 60,
+                 max_retries: int = 5):
         """
         初始化客户端
-        
+
         Args:
             api_key: TikHub API Key，不传则从环境变量 TIKHUB_API_KEY 读取
             timeout: 请求超时时间（秒）
-            proxy: 代理地址（如 http://127.0.0.1:7890）
             max_retries: 最大重试次数
         """
         self.api_key = api_key or os.getenv("TIKHUB_API_KEY")
         if not self.api_key:
             raise ValueError("请设置 TIKHUB_API_KEY 环境变量或在初始化时传入 api_key")
-        
+
         self.timeout = timeout
-        self.proxy = proxy or os.getenv("TIKHUB_PROXY")
         self.max_retries = max_retries
         self.session = self._create_session()
         
@@ -68,16 +59,10 @@ class TikHubClient:
             allowed_methods=["GET", "POST"], # 允许重试的 HTTP 方法
             raise_on_status=False # 不抛出 HTTPError 异常
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy) # 创建 HTTPAdapter 实例
-        session.mount("https://", adapter) # 挂载 HTTPS 适配器
-        session.mount("http://", adapter) # 挂载 HTTP 适配器
-        
-        if self.proxy:
-            session.proxies = {
-                "http": self.proxy,
-                "https": self.proxy
-            }
-        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
         return session
     
     def _request(self, method: str, endpoint: str, params: Optional[Dict] = None, 
@@ -145,7 +130,7 @@ class TikHubClient:
     def search_tiktok_users(self, keyword: str, cursor: int = 0,
                             search_id: str = None, cookie: str = None,
                             parse_result: bool = True,
-                            output_path: str = None) -> Dict:
+                            output_path: str = DEFAULT_OUTPUT_PATH) -> Dict:
         """
         搜索 TikTok 用户
 
@@ -159,7 +144,7 @@ class TikHubClient:
                        从上一次请求的返回响应中获取: $.data.extra.logid 或 $.data.log_pb.impr_id
             cookie: 用户cookie（可选，如果需要使用自己的账号搜索或遇到接口报错时提供）
             parse_result: 是否解析结果（默认True，返回解析后的用户列表）
-            output_path: 输出Excel文件路径（可选，如提供则自动保存结果）
+            output_path: 输出Excel文件路径（可选，默认为环境变量 DEFAULT_OUTPUT_PATH 或 outputs/KOL达人评分最终报告.xlsx）
 
         Returns:
             如果 parse_result=True: 用户列表，每个用户包含：
@@ -197,8 +182,9 @@ class TikHubClient:
                         "sec_uid": user_info.get("sec_uid", ""),
                     })
 
-        if output_path and users:
-            self._save_users_to_excel(users, output_path)
+        if users:
+            save_path = output_path
+            self._save_users_to_excel(users, save_path)
 
         return users
 
@@ -215,13 +201,21 @@ class TikHubClient:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        df = pd.DataFrame([{
+        new_data = [{
             "达人昵称": u["nickname"],
             "unique_id": u["unique_id"],
             "signature": u.get("signature", ""),
             "粉丝数": u["followers"],
             "sec_uid": u["sec_uid"],
-        } for u in users])
+        } for u in users]
+
+        if output_path.exists():
+            existing_df = pd.read_excel(output_path)
+            new_df = pd.DataFrame(new_data)
+            df = pd.concat([existing_df, new_df], ignore_index=True)
+        else:
+            df = pd.DataFrame(new_data)
+
         df.to_excel(output_path, index=False)
         print(f"已保存 {len(users)} 个达人到 {output_path}")
     
@@ -319,15 +313,15 @@ class TikHubClient:
 
         return parsed_videos
 
-    def fetch_kol_play_data(self, sec_uid: str, cookie: str = None) -> Dict:
+    def fetch_kol_play_data(self, sec_uid: str, cookie: str = None,
+                             output_path: str = None) -> Dict:
         """
-        获取 KOL 达人的播放数据（最新3个 + 最早2个）
-
-        用于 analyze_kol_data 方法的参数
+        获取 KOL 达人的播放数据（最新3个 + 最早2个）并保存到 Excel
 
         Args:
             sec_uid: 用户 secUid
             cookie: 用户cookie（可选，用于获取受限制的内容）
+            output_path: Excel 文件路径（默认为 DEFAULT_OUTPUT_PATH）
 
         Returns:
             包含以下字段的字典：
@@ -370,18 +364,26 @@ class TikHubClient:
             data[f"评论{i}"] = stats.get("comment_count", 0)
             data[f"收藏{i}"] = stats.get("collect_count", 0)
 
+        if data.get("sec_uid"):
+            self.save_kol_to_excel(data, output_path)
+
         return data
 
-    def save_kol_to_csv(self, kol_data: Dict, csv_path: str = "kol_data.csv"):
+    def save_kol_to_excel(self, kol_data: Dict, output_path: str = None):
         """
-        将 KOL 数据保存到 CSV 文件
+        将 KOL 数据追加到 Excel 文件
 
         Args:
             kol_data: fetch_kol_play_data 返回的达人数据字典
-            csv_path: CSV 文件路径
+            output_path: Excel 文件路径（默认为 DEFAULT_OUTPUT_PATH）
         """
-        import os
         import pandas as pd
+
+        if output_path is None:
+            output_path = DEFAULT_OUTPUT_PATH
+
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         required_cols = ["达人昵称", "unique_id", "signature", "粉丝数", "作品数",
                          "播放1", "播放2", "播放3", "播放4", "播放5",
@@ -390,10 +392,9 @@ class TikHubClient:
                          "收藏1", "收藏2", "收藏3", "收藏4", "收藏5",
                          "内容匹配度", "sec_uid", "建联状态", "报价"]
 
-        if os.path.exists(csv_path):
-            df = pd.read_csv(csv_path, encoding="utf-8-sig")
+        if output_path.exists():
+            df = pd.read_excel(output_path)
         else:
-            os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
             df = pd.DataFrame(columns=required_cols)
 
         sec_uid = kol_data.get("sec_uid", "")
@@ -433,7 +434,8 @@ class TikHubClient:
         }
 
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+        df.to_excel(output_path, index=False)
+        print(f"已将 KOL 数据追加到 {output_path}")
 
 
 if __name__ == "__main__":
