@@ -48,6 +48,10 @@ assets/data/*.xlsx
 # Gmail auth state
 gmail_auth_state.json
 
+# Debug logs
+debug.log
+*.log
+
 # Sensitive business information
 references/产品信息.md
 references/邀约话术.md
