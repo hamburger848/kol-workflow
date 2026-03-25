@@ -36,7 +36,9 @@ description: "KOL达人投放管理工作流 - 从产品话题生成到达人建
 | `DEFAULT_OUTPUT_PATH` | 输出文件路径 | `assets/outputs/KOL达人评分最终报告.xlsx` |
 | `PRODUCT_INFO_FILE` | 产品信息文件路径 | `references/产品信息.md` |
 | `SCRIPT_STRATEGY_FILE` | 话术策略文件路径 | `references/邀约话术.md` |
-| `GMAIL_AUTH_STATE` | Gmail 登录状态文件路径 | `gmail_auth_state.json` |
+| `GMAIL_SENDER_EMAIL` | Gmail 发件人邮箱 | 无（必需） |
+| `GMAIL_APP_PASSWORD` | Gmail 应用专用密码 | 无（必需） |
+| `GMAIL_SENDER_NAME` | 发件人名称 | `KOL Workflow` |
 | `TIK_HUB_API_KEY` | TikHub API 密钥 | 无（必需） |
 | `OPENAI_API_KEY` | OpenAI API 密钥 | 无（必需） |
 
@@ -140,19 +142,26 @@ extract_contact_with_ai(excel_path)
 
 ## 步骤 6：发送邮件
 
-通过 Playwright 自动化发送 Gmail 邮件。
+通过 Gmail SMTP 发送邮件（更稳定可靠）。
 
 ```python
-from scripts.outreach.playwright_gmail_sender import GmailAutoSender
+from scripts.outreach.smtp_gmail_sender import GmailSMTPSender
 import os
 
-auth_state_path = os.getenv("GMAIL_AUTH_STATE", "gmail_auth_state.json")
-sender = GmailAutoSender(auth_state_path=auth_state_path)
-sender.login()
-sender.send_from_excel(delay=30)
+sender = GmailSMTPSender()
+sender.send_from_excel(
+    excel_path=os.getenv("DEFAULT_OUTPUT_PATH"),
+    delay=30
+)
 ```
 
-**参数**：`delay`：发送间隔（秒），建议 30 以上
+**前提条件**：
+1. 配置环境变量 `GMAIL_SENDER_EMAIL` 和 `GMAIL_APP_PASSWORD`
+2. 获取应用专用密码：https://myaccount.google.com/apppasswords
+
+**参数**：
+- `delay`：发送间隔（秒），建议 30 以上
+- `html`：是否发送HTML格式邮件（默认False）
 
 ***
 
@@ -165,7 +174,10 @@ sender.send_from_excel(delay=30)
 → 计算 CPM = 报价 ÷ (平均播放 ÷ 1000)，CPM ≤ 15 为合理
 
 ❌ **Gmail 发送失败**
-→ 先运行 `--login` 重新登录，确保 Playwright 浏览器已安装
+→ 检查应用专用密码是否正确，确保已启用两步验证
+
+❌ **SMTP认证失败**
+→ 确认使用的是应用专用密码而非登录密码，访问 https://myaccount.google.com/apppasswords 生成
 
 ❌ **邮箱提取不到**
 → 确认达人 signature 中确实包含联系方式

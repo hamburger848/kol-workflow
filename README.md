@@ -66,12 +66,15 @@ OPENAI_API_KEY=your_openai_api_key_here
 DEFAULT_OUTPUT_PATH=assets/outputs/KOL达人评分最终报告.xlsx
 PRODUCT_INFO_FILE=references/产品信息.md
 SCRIPT_STRATEGY_FILE=references/邀约话术.md
-GMAIL_AUTH_STATE=gmail_auth_state.json
+GMAIL_SENDER_EMAIL=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_app_password_here
+GMAIL_SENDER_NAME=KOL Workflow
 ```
 
 **获取API密钥：**
 - TikHub API: https://tikhub.io
 - OpenAI API: https://platform.openai.com
+- Gmail应用专用密码: https://myaccount.google.com/apppasswords
 
 ### 3. 安装依赖
 
@@ -106,7 +109,7 @@ kol-workflow/
 │   └── outreach/
 │       ├── extract_email.py           # 联系方式提取
 │       ├── generate_script.py         # 话术生成
-│       └── playwright_gmail_sender.py # Gmail自动发送
+│       └── smtp_gmail_sender.py       # Gmail SMTP发送
 ├── references/                 # 配置文件
 │   ├── 产品信息.md            # 产品信息模板
 │   └── 邀约话术.md           # 话术策略模板
@@ -282,12 +285,15 @@ OPENAI_API_KEY=your_openai_api_key_here
 DEFAULT_OUTPUT_PATH=assets/outputs/KOL达人评分最终报告.xlsx
 PRODUCT_INFO_FILE=references/产品信息.md
 SCRIPT_STRATEGY_FILE=references/邀约话术.md
-GMAIL_AUTH_STATE=gmail_auth_state.json
+GMAIL_SENDER_EMAIL=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_app_password_here
+GMAIL_SENDER_NAME=KOL Workflow
 ```
 
 **Get API Keys:**
 - TikHub API: https://tikhub.io
 - OpenAI API: https://platform.openai.com
+- Gmail App Password: https://myaccount.google.com/apppasswords
 
 ### 3. Install Dependencies
 
@@ -322,7 +328,7 @@ kol-workflow/
 │   └── outreach/
 │       ├── extract_email.py           # Contact extraction
 │       ├── generate_script.py         # Script generation
-│       └── playwright_gmail_sender.py # Gmail automation
+│       └── smtp_gmail_sender.py       # Gmail SMTP sending
 ├── references/                 # Configuration files
 │   ├── 产品信息.md            # Product info template
 │   └── 邀约话术.md           # Script strategy template
