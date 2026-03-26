@@ -1,7 +1,8 @@
-***
+---
 
 name: "kol-workflow"
 description: "KOL达人投放管理工作流 - 从产品话题生成到达人建联发送的完整流程。当用户需要：生成产品话题关键词、搜索达人并爬取数据、评分筛选达人、提取联系方式、生成建联话术、发送邮件时调用此技能。"
+---
 ------------------------------------------------------------------------------------------------------------
 
 # KOL Claw - 达人投放管理系统
@@ -33,13 +34,13 @@ description: "KOL达人投放管理工作流 - 从产品话题生成到达人建
 
 | 环境变量 | 说明 | 默认值 |
 |---------|------|--------|
-| `DEFAULT_OUTPUT_PATH` | 输出文件路径 | `assets/outputs/KOL达人评分最终报告.xlsx` |
+| `DEFAULT_OUTPUT_PATH` | 输出文件路径 | `outputs/KOL达人评分最终报告.xlsx` |
 | `PRODUCT_INFO_FILE` | 产品信息文件路径 | `references/产品信息.md` |
 | `SCRIPT_STRATEGY_FILE` | 话术策略文件路径 | `references/邀约话术.md` |
 | `GMAIL_SENDER_EMAIL` | Gmail 发件人邮箱 | 无（必需） |
 | `GMAIL_APP_PASSWORD` | Gmail 应用专用密码 | 无（必需） |
 | `GMAIL_SENDER_NAME` | 发件人名称 | `KOL Workflow` |
-| `TIK_HUB_API_KEY` | TikHub API 密钥 | 无（必需） |
+| `TIKHUB_API_KEY` | TikHub API 密钥 | 无（必需） |
 | `OPENAI_API_KEY` | OpenAI API 密钥 | 无（必需） |
 
 ***
@@ -71,22 +72,93 @@ description: "KOL达人投放管理工作流 - 从产品话题生成到达人建
 
 **统一输出文件**：`DEFAULT_OUTPUT_PATH` 环境变量
 
-### 2.1 搜索达人
+### 2.1 TikHubClient API 方法
+
+```python
+from scripts.search.tikhub_client import TikHubClient
+client = TikHubClient()
+```
+
+| 方法 | 说明 | 端点 |
+|-----|------|------|
+| `search_users(keyword, ...)` | 搜索用户 | GET /tiktok/app/v3/fetch_user_search_result |
+| `search_videos(keyword, ...)` | 搜索视频 | GET /tiktok/app/v3/fetch_video_search_result |
+| `fetch_user_post(sec_uid, ...)` | 获取用户作品列表 | GET /tiktok/app/v3/fetch_user_post_videos_v3 |
+| `fetch_similar_user_recommendations(sec_uid, ...)` | 获取类似用户推荐 | GET /tiktok/app/v3/fetch_similar_user_recommendations |
+| `fetch_kol_play_data(sec_uid, ...)` | 获取KOL播放数据 | 内部调用 fetch_user_post |
+
+### 2.2 search_users - 搜索用户
+
+```python
+users = client.search_users(
+    keyword="beauty skincare",
+    offset=0,
+    count=20,
+    follower_count="ONE_H_K_PLUS",  # 可选: ZERO_TO_ONE_K, ONE_K_TO_TEN_K, TEN_K_TO_ONE_H_K, ONE_H_K_PLUS
+    profile_type="VERIFIED",         # 可选: VERIFIED
+    output_path=output_path
+)
+```
+
+**返回字段**：uid, unique_id, nickname, signature, sec_uid, followers, following, video_count, total_likes, verified
+
+### 2.3 fetch_user_post - 获取用户作品列表
+
+```python
+videos = client.fetch_user_post(
+    sec_uid="用户sec_uid",
+    max_cursor=0,      # 翻页游标
+    count=20,
+    sort_type=0       # 0:最新, 1:热门
+)
+```
+
+**返回字段**：id, create_time, desc, author, stats(play_count, digg_count, comment_count, collect_count, share_count)
+
+### 2.4 fetch_similar_user_recommendations - 获取类似用户推荐
+
+根据已知用户推荐相似达人：
+
+```python
+similar_users = client.fetch_similar_user_recommendations(
+    sec_uid="用户sec_uid",
+    page_token=None   # 翻页标记
+)
+```
+
+### 2.5 fetch_kol_play_data - 获取KOL播放数据并保存
+
+自动获取用户最新3个+最早2个视频的播放数据，保存到Excel：
+
+```python
+kol_data = client.fetch_kol_play_data(
+    sec_uid="用户sec_uid",
+    unique_id="用户名",  # sec_uid为空时使用
+    output_path=output_path
+)
+```
+
+**输出**：包含播放1-5、点赞1-5、评论1-5、收藏1-5的数据
+
+### 2.6 代码示例
 
 ```python
 from scripts.search.tikhub_client import TikHubClient
 import os
 
 client = TikHubClient()
-output_path = os.getenv("DEFAULT_OUTPUT_PATH", "assets/outputs/KOL达人评分最终报告.xlsx")
-users = client.search_tiktok_users(keyword=keyword, output_path=output_path)
-```
+output_path = os.getenv("DEFAULT_OUTPUT_PATH", "outputs/KOL达人评分最终报告.xlsx")
 
-### 2.2 爬取达人详细数据
+# 搜索用户（推荐）
+users = client.search_users(keyword="beauty skincare", output_path=output_path)
 
-```python
+# 获取用户作品播放数据
 for user in users:
     client.fetch_kol_play_data(sec_uid=user["sec_uid"], output_path=output_path)
+
+# 或者获取类似用户推荐
+if users:
+    similar = client.fetch_similar_user_recommendations(sec_uid=users[0]["sec_uid"])
 ```
 
 **输入**：搜索关键词（步骤1生成）
@@ -103,7 +175,7 @@ for user in users:
 from scripts.analyze.anaylze_kol_v2 import run_kol_analysis
 import os
 
-output_path = os.getenv("DEFAULT_OUTPUT_PATH", "assets/outputs/KOL达人评分最终报告.xlsx")
+output_path = os.getenv("DEFAULT_OUTPUT_PATH", "outputs/KOL达人评分最终报告.xlsx")
 run_kol_analysis(output_path)
 ```
 
@@ -119,7 +191,7 @@ run_kol_analysis(output_path)
 from scripts.outreach.extract_email import extract_contact_with_ai
 import os
 
-excel_path = os.getenv("DEFAULT_OUTPUT_PATH", "assets/outputs/KOL达人评分最终报告.xlsx")
+excel_path = os.getenv("DEFAULT_OUTPUT_PATH", "outputs/KOL达人评分最终报告.xlsx")
 extract_contact_with_ai(excel_path)
 ```
 
@@ -207,14 +279,13 @@ kol-workflow/
 │   ├── outreach/
 │   │   ├── extract_email.py           # 提取联系方式
 │   │   ├── generate_script.py         # 生成建联话术
-│   │   └── playwright_gmail_sender.py # Gmail发送
+│   │   └── smtp_gmail_sender.py      # Gmail发送
 ├── references/                # 文档资料
 │   ├── 产品信息.md           # 产品信息
 │   ├── 邀约话术.md          # 话术策略模板
-│   └── docs/
-│       └── anaylze_kol_v2流程说明.md
-├── assets/                    # 模板资源
-│   └── data/                 # 数据目录
+├── outputs/                   # 输出目录
+│   └── KOL达人评分最终报告.xlsx
+├── .env                       # 环境变量配置
 └── requirements.txt
 ```
 
@@ -225,8 +296,6 @@ kol-workflow/
 ### 1. 安装依赖
 
 ```bash
-cd kol-claw/kol-workflow
+cd kol-workflow
 pip install -r requirements.txt
-playwright install chromium
 ```
-
